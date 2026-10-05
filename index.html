@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>آزمایشگاه اقتصاد: مدل انباشت سرمایه</title>
+    <style>
+        :root {
+            --bg-color: #1e1e24;
+            --panel-bg: #2b2b36;
+            --primary: #00a8ff;
+            --success: #4cd137;
+            --danger: #e84118;
+            --text: #f5f6fa;
+        }
+        body {
+            font-family: Tahoma, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .dashboard {
+            background-color: var(--panel-bg);
+            padding: 30px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h2 {
+            text-align: center;
+            margin-top: 0;
+            color: var(--primary);
+            border-bottom: 2px solid #444;
+            padding-bottom: 10px;
+        }
+        .formula {
+            text-align: center;
+            font-size: 1.2em;
+            letter-spacing: 2px;
+            background: #111;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            direction: ltr;
+        }
+        .module {
+            background: #3a3a48;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border-right: 4px solid var(--primary);
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .slider-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        input[type="range"] {
+            width: 100%;
+            cursor: pointer;
+        }
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 1.2em;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.3s;
+            font-family: inherit;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background-color: #008cd9;
+        }
+        .progress-container {
+            background: #111;
+            height: 25px;
+            border-radius: 12.5px;
+            overflow: hidden;
+            margin-top: 10px;
+            position: relative;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 50%;
+            background-color: var(--success);
+            transition: width 0.5s ease, background-color 0.5s ease;
+        }
+        .alert {
+            color: var(--danger);
+            font-size: 0.9em;
+            text-align: center;
+            margin-top: 10px;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <h2>شبیه‌‌ساز تخصیص منابع</h2>
+        
+        <div class="formula">k̇ = f(k) - c - nk</div>
+
+        <!-- بخش نمایش وضعیت فعلی -->
+        <div class="module" style="border-right-color: #9c88ff;">
+            <div class="stat-row">
+                <span>موجودی سرانه سرمایه (k):</span>
+                <strong id="display-k">100.00</strong>
+            </div>
+            <div class="stat-row">
+                <span>تولید سرانه سالانه f(k):</span>
+                <strong id="display-y">50.00</strong>
+            </div>
+            <div class="progress-container">
+                <div id="k-bar" class="progress-bar"></div>
+            </div>
+        </div>
+
+        <!-- بخش سیاست‌گذاری (تصمیمات بازیکن) -->
+        <div class="module">
+            <div class="slider-container">
+                <div class="stat-row">
+                    <label for="slider-c">سیاست مصرفی / یارانه‌ها (c):</label>
+                    <span id="display-c">25.00</span>
+                </div>
+                <input type="range" id="slider-c" min="0" max="50" step="1" value="25">
+            </div>
+        </div>
+
+        <div class="module">
+            <div class="slider-container">
+                <div class="stat-row">
+                    <label for="slider-n">نرخ رشد جمعیت / مهاجرت (n):</label>
+                    <span id="display-n">5%</span>
+                </div>
+                <input type="range" id="slider-n" min="0" max="15" step="1" value="5">
+            </div>
+        </div>
+
+        <div class="alert" id="alert-msg"></div>
+
+        <button class="btn" onclick="nextTurn()">گذر به سال بعد (محاسبه k̇)</button>
+    </div>
+
+    <script>
+        // متغیرهای اولیه (State)
+        let k = 100; // سرمایه اولیه
+        const A = 5; // ضریب تکنولوژی در تابع تولید
+        let max_k_visual = 300; // برای تنظیم عرض نوار پیشرفت
+
+        // المان‌های DOM
+        const el_k = document.getElementById('display-k');
+        const el_y = document.getElementById('display-y');
+        const el_c = document.getElementById('display-c');
+        const el_n = document.getElementById('display-n');
+        const slider_c = document.getElementById('slider-c');
+        const slider_n = document.getElementById('slider-n');
+        const k_bar = document.getElementById('k-bar');
+        const alertMsg = document.getElementById('alert-msg');
+
+        // تابع محاسبه تولید
+        function calculateProduction(capital) {
+            // f(k) = A * k^0.5
+            return A * Math.sqrt(capital);
+        }
+
+        // به‌روزرسانی نمایش رابط کاربری در زمان حرکت دادن اهرم‌ها
+        function updateUI() {
+            let y = calculateProduction(k);
+            
+            // تنظیم سقف مجاز اهرم مصرف بر اساس تولید
+            slider_c.max = Math.floor(y);
+            if(parseFloat(slider_c.value) > y) slider_c.value = Math.floor(y);
+
+            el_k.innerText = k.toFixed(2);
+            el_y.innerText = y.toFixed(2);
+            el_c.innerText = parseFloat(slider_c.value).toFixed(2);
+            el_n.innerText = slider_n.value + "%";
+
+            // تنظیم نوار گرافیکی
+            let percentage = (k / max_k_visual) * 100;
+            if(percentage > 100) percentage = 100;
+            k_bar.style.width = percentage + "%";
+            
+            if(percentage < 20) {
+                k_bar.style.backgroundColor = "var(--danger)";
+            } else {
+                k_bar.style.backgroundColor = "var(--success)";
+            }
+        }
+
+        // رویدادهای تغییر اهرم‌ها
+        slider_c.addEventListener('input', updateUI);
+        slider_n.addEventListener('input', updateUI);
+
+        // حلقه اصلی بازی (Game Loop)
+        function nextTurn() {
+            let y = calculateProduction(k);
+            let c = parseFloat(slider_c.value);
+            let n = parseFloat(slider_n.value) / 100;
+
+            // فرمول اصلی: تغییر در سرمایه = تولید - مصرف - هزینه تجهیز جمعیت جدید
+            let k_dot = y - c - (n * k);
+
+            // اعمال تغییرات برای سال بعد
+            k = k + k_dot;
+
+            // شرط باخت (فروپاشی اقتصادی)
+            if (k < 1) {
+                k = 0;
+                alertMsg.innerText = "اقتصاد فروپاشید! سرمایه به صفر رسید.";
+                document.querySelector('.btn').disabled = true;
+                document.querySelector('.btn').style.backgroundColor = "#555";
+            } else if (k_dot < 0) {
+                alertMsg.innerText = `هشدار: سرمایه در حال کاهش است! (k̇ = ${k_dot.toFixed(2)})`;
+                alertMsg.style.color = "var(--danger)";
+            } else {
+                alertMsg.innerText = `اقتصاد در حال رشد است. (k̇ = +${k_dot.toFixed(2)})`;
+                alertMsg.style.color = "var(--success)";
+            }
+
+            updateUI();
+        }
+
+        // مقداردهی اولیه
+        updateUI();
+    </script>
+</body>
+</html>
